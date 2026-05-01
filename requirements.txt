@@ -1,0 +1,12 @@
+# AI EA v9 PRO — Requirements
+MetaTrader5
+numpy
+pandas
+scikit-learn
+xgboost
+lightgbm          # v9 NEW: 4th ensemble member, highest accuracy on tabular data
+matplotlib
+plotly
+cryptography
+pytz
+scipy

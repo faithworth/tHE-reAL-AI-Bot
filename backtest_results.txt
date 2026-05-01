@@ -1,0 +1,575 @@
+
+========================================================================
+  AI EA v13 — BACKTEST RESULTS SUMMARY (7-tier MTF)
+  Generated: 2026-04-28 18:45:32
+  Bars/symbol: 8000   Lot: 0.01   WF windows: 5   MC runs: 500
+========================================================================
+
+  ▶ XAUUSD..
+------------------------------------------------------------------------
+  Bars of history:             8000
+  ML features:                 70
+  ML WF accuracy:              0.621
+
+  BACKTEST (full period):
+    Total trades:              2852 ✓
+    Win rate:                  78.0%
+    Profit factor:             8.185
+    Sharpe ratio:              11.746
+    Max drawdown ($):          $225.62
+    Net profit ($):            $60452.85
+    Score:                     94.7
+
+  WALK-FORWARD (OOS average):
+    WF windows:                5
+    WF win rate:               75.0%
+    WF profit factor:          6.347
+    WF Sharpe:                 14.736
+    WF net profit ($):         $15026.57
+
+  MONTE CARLO (drawdown risk):
+    Base profit ($):           $60452.85
+    Win rate:                  78.0%
+    Profit factor:             8.185
+    Max DD p50 ($):            $97.29
+    Max DD p95 ($):            $139.11
+    Max DD p99 ($):            $162.25
+
+  VERDICT: 🟢 STRONG EDGE — looks profitable, consider live testing
+------------------------------------------------------------------------
+
+  ▶ BTCUSD..
+------------------------------------------------------------------------
+  Bars of history:             8000
+  ML features:                 70
+  ML WF accuracy:              0.606
+
+  BACKTEST (full period):
+    Total trades:              2738 ✓
+    Win rate:                  73.0%
+    Profit factor:             5.519
+    Sharpe ratio:              12.715
+    Max drawdown ($):          $133.19
+    Net profit ($):            $17716.88
+    Score:                     94.7
+
+  WALK-FORWARD (OOS average):
+    WF windows:                5
+    WF win rate:               76.4%
+    WF profit factor:          7.504
+    WF Sharpe:                 15.363
+    WF net profit ($):         $5873.53
+
+  MONTE CARLO (drawdown risk):
+    Base profit ($):           $17716.88
+    Win rate:                  73.0%
+    Profit factor:             5.519
+    Max DD p50 ($):            $33.59
+    Max DD p95 ($):            $45.63
+    Max DD p99 ($):            $54.58
+
+  VERDICT: 🟢 STRONG EDGE — looks profitable, consider live testing
+------------------------------------------------------------------------
+
+  ▶ US100..
+------------------------------------------------------------------------
+  Bars of history:             8000
+  ML features:                 70
+  ML WF accuracy:              0.681
+
+  BACKTEST (full period):
+    Total trades:              1840 ✓
+    Win rate:                  46.9%
+    Profit factor:             1.865
+    Sharpe ratio:              4.362
+    Max drawdown ($):          $78.00
+    Net profit ($):            $612.30
+    Score:                     42.4
+
+  WALK-FORWARD (OOS average):
+    WF windows:                5
+    WF win rate:               46.3%
+    WF profit factor:          20.824
+    WF Sharpe:                 9.730
+    WF net profit ($):         $248.74
+
+  MONTE CARLO (drawdown risk):
+    Base profit ($):           $612.30
+    Win rate:                  46.9%
+    Profit factor:             1.865
+    Max DD p50 ($):            $11.13
+    Max DD p95 ($):            $16.31
+    Max DD p99 ($):            $19.65
+
+  VERDICT: 🟢 STRONG EDGE — looks profitable, consider live testing
+------------------------------------------------------------------------
+
+  ▶ US30..
+------------------------------------------------------------------------
+  Bars of history:             8000
+  ML features:                 70
+  ML WF accuracy:              0.581
+
+  BACKTEST (full period):
+    Total trades:              2662 ✓
+    Win rate:                  77.0%
+    Profit factor:             6.604
+    Sharpe ratio:              13.414
+    Max drawdown ($):          $19.02
+    Net profit ($):            $3756.34
+    Score:                     97.6
+
+  WALK-FORWARD (OOS average):
+    WF windows:                5
+    WF win rate:               79.4%
+    WF profit factor:          9.266
+    WF Sharpe:                 17.162
+    WF net profit ($):         $1093.31
+
+  MONTE CARLO (drawdown risk):
+    Base profit ($):           $3756.34
+    Win rate:                  77.0%
+    Profit factor:             6.604
+    Max DD p50 ($):            $6.29
+    Max DD p95 ($):            $8.33
+    Max DD p99 ($):            $9.31
+
+  VERDICT: 🟢 STRONG EDGE — looks profitable, consider live testing
+------------------------------------------------------------------------
+
+  ▶ US500..
+------------------------------------------------------------------------
+  Bars of history:             8000
+  ML features:                 70
+  ML WF accuracy:              0.610
+
+  BACKTEST (full period):
+    Total trades:              1975 ✓
+    Win rate:                  48.2%
+    Profit factor:             2.041
+    Sharpe ratio:              4.994
+    Max drawdown ($):          $8.13
+    Net profit ($):            $150.53
+    Score:                     45.6
+
+  WALK-FORWARD (OOS average):
+    WF windows:                5
+    WF win rate:               44.8%
+    WF profit factor:          10.384
+    WF Sharpe:                 6.034
+    WF net profit ($):         $46.85
+
+  MONTE CARLO (drawdown risk):
+    Base profit ($):           $150.53
+    Win rate:                  48.2%
+    Profit factor:             2.041
+    Max DD p50 ($):            $1.99
+    Max DD p95 ($):            $2.88
+    Max DD p99 ($):            $3.64
+
+  VERDICT: 🟢 STRONG EDGE — looks profitable, consider live testing
+------------------------------------------------------------------------
+
+  ▶ XAGUSD..
+------------------------------------------------------------------------
+  Bars of history:             8000
+  ML features:                 70
+  ML WF accuracy:              0.573
+
+  BACKTEST (full period):
+    Total trades:              1183 ✓
+    Win rate:                  47.3%
+    Profit factor:             3.427
+    Sharpe ratio:              6.580
+    Max drawdown ($):          $1830.55
+    Net profit ($):            $27074.08
+    Score:                     59.5
+
+  WALK-FORWARD (OOS average):
+    WF windows:                5
+    WF win rate:               36.1%
+    WF profit factor:          11.927
+    WF Sharpe:                 2.688
+    WF net profit ($):         $8075.29
+
+  MONTE CARLO (drawdown risk):
+    Base profit ($):           $27074.08
+    Win rate:                  47.3%
+    Profit factor:             3.427
+    Max DD p50 ($):            $270.48
+    Max DD p95 ($):            $401.19
+    Max DD p99 ($):            $501.11
+
+  VERDICT: 🟢 STRONG EDGE — looks profitable, consider live testing
+------------------------------------------------------------------------
+
+  ▶ EURUSD..
+------------------------------------------------------------------------
+  Bars of history:             8000
+  ML features:                 70
+  ML WF accuracy:              0.666
+
+  BACKTEST (full period):
+    Total trades:              2770 ✓
+    Win rate:                  67.9%
+    Profit factor:             4.298
+    Sharpe ratio:              10.823
+    Max drawdown ($):          $30.24
+    Net profit ($):            $4155.77
+    Score:                     83.2
+
+  WALK-FORWARD (OOS average):
+    WF windows:                5
+    WF win rate:               71.1%
+    WF profit factor:          5.743
+    WF Sharpe:                 13.071
+    WF net profit ($):         $1411.85
+
+  MONTE CARLO (drawdown risk):
+    Base profit ($):           $4155.77
+    Win rate:                  67.9%
+    Profit factor:             4.298
+    Max DD p50 ($):            $10.49
+    Max DD p95 ($):            $14.78
+    Max DD p99 ($):            $17.45
+
+  VERDICT: 🟢 STRONG EDGE — looks profitable, consider live testing
+------------------------------------------------------------------------
+
+  ▶ GBPUSD..
+------------------------------------------------------------------------
+  Bars of history:             8000
+  ML features:                 70
+  ML WF accuracy:              0.646
+
+  BACKTEST (full period):
+    Total trades:              2774 ✓
+    Win rate:                  66.4%
+    Profit factor:             3.981
+    Sharpe ratio:              10.486
+    Max drawdown ($):          $34.21
+    Net profit ($):            $4722.15
+    Score:                     79.4
+
+  WALK-FORWARD (OOS average):
+    WF windows:                5
+    WF win rate:               68.8%
+    WF profit factor:          5.246
+    WF Sharpe:                 11.974
+    WF net profit ($):         $1734.38
+
+  MONTE CARLO (drawdown risk):
+    Base profit ($):           $4722.15
+    Win rate:                  66.4%
+    Profit factor:             3.981
+    Max DD p50 ($):            $12.76
+    Max DD p95 ($):            $16.47
+    Max DD p99 ($):            $19.17
+
+  VERDICT: 🟢 STRONG EDGE — looks profitable, consider live testing
+------------------------------------------------------------------------
+
+  ▶ USDJPY..
+------------------------------------------------------------------------
+  Bars of history:             8000
+  ML features:                 70
+  ML WF accuracy:              0.673
+
+  BACKTEST (full period):
+    Total trades:              2834 ✓
+    Win rate:                  69.6%
+    Profit factor:             4.793
+    Sharpe ratio:              11.811
+    Max drawdown ($):          $3910.76
+    Net profit ($):            $755155.05
+    Score:                     89.8
+
+  WALK-FORWARD (OOS average):
+    WF windows:                5
+    WF win rate:               69.4%
+    WF profit factor:          5.200
+    WF Sharpe:                 12.401
+    WF net profit ($):         $245418.22
+
+  MONTE CARLO (drawdown risk):
+    Base profit ($):           $755155.05
+    Win rate:                  69.6%
+    Profit factor:             4.793
+    Max DD p50 ($):            $1582.21
+    Max DD p95 ($):            $2129.80
+    Max DD p99 ($):            $2379.36
+
+  VERDICT: 🟢 STRONG EDGE — looks profitable, consider live testing
+------------------------------------------------------------------------
+
+  ▶ AUDUSD..
+------------------------------------------------------------------------
+  Bars of history:             8000
+  ML features:                 70
+  ML WF accuracy:              0.643
+
+  BACKTEST (full period):
+    Total trades:              2816 ✓
+    Win rate:                  62.8%
+    Profit factor:             3.530
+    Sharpe ratio:              8.953
+    Max drawdown ($):          $25.12
+    Net profit ($):            $2932.85
+    Score:                     71.2
+
+  WALK-FORWARD (OOS average):
+    WF windows:                5
+    WF win rate:               65.8%
+    WF profit factor:          4.363
+    WF Sharpe:                 10.435
+    WF net profit ($):         $1078.75
+
+  MONTE CARLO (drawdown risk):
+    Base profit ($):           $2932.85
+    Win rate:                  62.8%
+    Profit factor:             3.530
+    Max DD p50 ($):            $9.69
+    Max DD p95 ($):            $13.35
+    Max DD p99 ($):            $15.75
+
+  VERDICT: 🟢 STRONG EDGE — looks profitable, consider live testing
+------------------------------------------------------------------------
+
+  ▶ USDCHF..
+------------------------------------------------------------------------
+  Bars of history:             8000
+  ML features:                 70
+  ML WF accuracy:              0.641
+
+  BACKTEST (full period):
+    Total trades:              2819 ✓
+    Win rate:                  62.0%
+    Profit factor:             3.313
+    Sharpe ratio:              8.683
+    Max drawdown ($):          $28.67
+    Net profit ($):            $2884.37
+    Score:                     68.7
+
+  WALK-FORWARD (OOS average):
+    WF windows:                5
+    WF win rate:               62.4%
+    WF profit factor:          3.852
+    WF Sharpe:                 9.249
+    WF net profit ($):         $944.88
+
+  MONTE CARLO (drawdown risk):
+    Base profit ($):           $2884.37
+    Win rate:                  62.0%
+    Profit factor:             3.313
+    Max DD p50 ($):            $10.15
+    Max DD p95 ($):            $14.01
+    Max DD p99 ($):            $16.04
+
+  VERDICT: 🟢 STRONG EDGE — looks profitable, consider live testing
+------------------------------------------------------------------------
+
+  ▶ NZDUSD..
+------------------------------------------------------------------------
+  Bars of history:             8000
+  ML features:                 70
+  ML WF accuracy:              0.642
+
+  BACKTEST (full period):
+    Total trades:              2781 ✓
+    Win rate:                  61.4%
+    Profit factor:             3.115
+    Sharpe ratio:              8.339
+    Max drawdown ($):          $26.76
+    Net profit ($):            $2383.78
+    Score:                     66.2
+
+  WALK-FORWARD (OOS average):
+    WF windows:                5
+    WF win rate:               64.2%
+    WF profit factor:          3.922
+    WF Sharpe:                 9.601
+    WF net profit ($):         $922.89
+
+  MONTE CARLO (drawdown risk):
+    Base profit ($):           $2383.78
+    Win rate:                  61.4%
+    Profit factor:             3.115
+    Max DD p50 ($):            $9.42
+    Max DD p95 ($):            $12.88
+    Max DD p99 ($):            $15.13
+
+  VERDICT: 🟢 STRONG EDGE — looks profitable, consider live testing
+------------------------------------------------------------------------
+
+  ▶ EURGBP..
+------------------------------------------------------------------------
+  Bars of history:             8000
+  ML features:                 70
+  ML WF accuracy:              0.944
+
+  BACKTEST (full period):
+    Total trades:              510 ✓
+    Win rate:                  36.3%
+    Profit factor:             1.050
+    Sharpe ratio:              0.339
+    Max drawdown ($):          $52.62
+    Net profit ($):            $13.13
+    Score:                     23.6
+
+  WALK-FORWARD (OOS average):
+    WF windows:                5
+    WF win rate:               33.1%
+    WF profit factor:          0.994
+    WF Sharpe:                 -2.214
+    WF net profit ($):         $17.53
+
+  MONTE CARLO (drawdown risk):
+    Base profit ($):           $13.13
+    Win rate:                  36.3%
+    Profit factor:             1.050
+    Max DD p50 ($):            $25.04
+    Max DD p95 ($):            $48.68
+    Max DD p99 ($):            $60.02
+
+  VERDICT: 🟠 WEAK EDGE — marginally positive, high risk
+------------------------------------------------------------------------
+
+  ▶ EURJPY..
+------------------------------------------------------------------------
+  Bars of history:             8000
+  ML features:                 70
+  ML WF accuracy:              0.651
+
+  BACKTEST (full period):
+    Total trades:              2798 ✓
+    Win rate:                  70.2%
+    Profit factor:             5.263
+    Sharpe ratio:              12.399
+    Max drawdown ($):          $2981.13
+    Net profit ($):            $752525.28
+    Score:                     92.9
+
+  WALK-FORWARD (OOS average):
+    WF windows:                5
+    WF win rate:               70.6%
+    WF profit factor:          5.504
+    WF Sharpe:                 13.051
+    WF net profit ($):         $223793.02
+
+  MONTE CARLO (drawdown risk):
+    Base profit ($):           $752525.28
+    Win rate:                  70.2%
+    Profit factor:             5.263
+    Max DD p50 ($):            $1429.27
+    Max DD p95 ($):            $1946.02
+    Max DD p99 ($):            $2313.28
+
+  VERDICT: 🟢 STRONG EDGE — looks profitable, consider live testing
+------------------------------------------------------------------------
+
+  ▶ GBPJPY..
+------------------------------------------------------------------------
+  Bars of history:             8000
+  ML features:                 70
+  ML WF accuracy:              0.663
+
+  BACKTEST (full period):
+    Total trades:              2786 ✓
+    Win rate:                  71.0%
+    Profit factor:             5.323
+    Sharpe ratio:              12.542
+    Max drawdown ($):          $6401.01
+    Net profit ($):            $950145.27
+    Score:                     93.5
+
+  WALK-FORWARD (OOS average):
+    WF windows:                5
+    WF win rate:               70.2%
+    WF profit factor:          5.856
+    WF Sharpe:                 12.972
+    WF net profit ($):         $280597.94
+
+  MONTE CARLO (drawdown risk):
+    Base profit ($):           $950145.27
+    Win rate:                  71.0%
+    Profit factor:             5.323
+    Max DD p50 ($):            $1762.14
+    Max DD p95 ($):            $2395.10
+    Max DD p99 ($):            $2743.53
+
+  VERDICT: 🟢 STRONG EDGE — looks profitable, consider live testing
+------------------------------------------------------------------------
+
+  ▶ AUDJPY..
+------------------------------------------------------------------------
+  Bars of history:             8000
+  ML features:                 70
+  ML WF accuracy:              0.682
+
+  BACKTEST (full period):
+    Total trades:              2820 ✓
+    Win rate:                  69.0%
+    Profit factor:             4.810
+    Sharpe ratio:              11.752
+    Max drawdown ($):          $3240.20
+    Net profit ($):            $586424.69
+    Score:                     89.6
+
+  WALK-FORWARD (OOS average):
+    WF windows:                5
+    WF win rate:               69.9%
+    WF profit factor:          5.323
+    WF Sharpe:                 12.526
+    WF net profit ($):         $173416.80
+
+  MONTE CARLO (drawdown risk):
+    Base profit ($):           $586424.69
+    Win rate:                  69.0%
+    Profit factor:             4.810
+    Max DD p50 ($):            $1226.24
+    Max DD p95 ($):            $1694.37
+    Max DD p99 ($):            $1989.15
+
+  VERDICT: 🟢 STRONG EDGE — looks profitable, consider live testing
+------------------------------------------------------------------------
+
+  ▶ CHFJPY..
+------------------------------------------------------------------------
+  Bars of history:             8000
+  ML features:                 70
+  ML WF accuracy:              0.663
+
+  BACKTEST (full period):
+    Total trades:              2850 ✓
+    Win rate:                  65.0%
+    Profit factor:             3.886
+    Sharpe ratio:              10.386
+    Max drawdown ($):          $6232.22
+    Net profit ($):            $702584.15
+    Score:                     77.9
+
+  WALK-FORWARD (OOS average):
+    WF windows:                5
+    WF win rate:               67.6%
+    WF profit factor:          5.188
+    WF Sharpe:                 11.767
+    WF net profit ($):         $240951.43
+
+  MONTE CARLO (drawdown risk):
+    Base profit ($):           $702584.15
+    Win rate:                  65.0%
+    Profit factor:             3.886
+    Max DD p50 ($):            $1901.98
+    Max DD p95 ($):            $2556.28
+    Max DD p99 ($):            $3127.16
+
+  VERDICT: 🟢 STRONG EDGE — looks profitable, consider live testing
+------------------------------------------------------------------------
+
+========================================================================
+  ✓ = meets target threshold   ✗ = below threshold
+  Key thresholds: Win rate ≥50%  PF ≥1.2  Sharpe ≥0.8  Trades ≥30
+  NOTE: Backtest uses ML probability filter only. Live system adds
+  regime/MTF/session/composite-score gates → expect ~5-20x fewer live
+  trades than shown here. VERDICT reflects ML edge, not exact live count.
+========================================================================
