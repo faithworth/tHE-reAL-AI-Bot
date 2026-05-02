@@ -768,11 +768,114 @@ class CTraderAdapter(BaseBroker):
     # Trade history
     # ─────────────────────────────────────────────────────────────────────────
 
-    def get_trade_history(self, days: int = 7, symbol: str = "") -> List[Dict]:
-        # cTrader deal history requires ProtoOADealListReq
-        # Implementation available but requires date pagination
-        # Returning empty list as placeholder (non-critical for live trading)
-        return []
+    def get_trade_history(self, days: int = 365, symbol: str = "") -> List[Dict]:
+        """
+        Pull closed deal history from cTrader via ProtoOADealListReq.  (v20)
+
+        Was a stub returning []. Now fully implemented with date pagination
+        (cTrader limits each request to 1 week, so we paginate over `days`).
+        PnL is taken directly from deal.closePositionDetail.grossProfit.
+        365d default (was 7d) so TradeHistoryLearner gets full context.
+        """
+        if not self.ensure_connected():
+            return []
+        if not CTRADER_AVAILABLE:
+            return []
+
+        try:
+            future = asyncio.run_coroutine_threadsafe(
+                self._async_get_deal_history(days=days, symbol=symbol),
+                self._loop,
+            )
+            return future.result(timeout=60)
+        except Exception as e:
+            logger.error(f"[cTrader] get_trade_history: {e}")
+            return []
+
+    async def _async_get_deal_history(
+        self, days: int = 365, symbol: str = ""
+    ) -> List[Dict]:
+        """
+        cTrader ProtoOADealListReq paginated deal pull.
+        API allows max 604800000 ms (7 days) per request — we loop weekly chunks.
+        """
+        try:
+            # Dynamic import — only needed here
+            try:
+                from ctrader_open_api.messages.OpenApiMessages_pb2 import (
+                    ProtoOADealListReq,
+                )
+            except ImportError:
+                logger.warning("[cTrader] ProtoOADealListReq not available in installed version")
+                return []
+
+            end_ms   = int(datetime.now(timezone.utc).timestamp() * 1000)
+            start_ms = end_ms - int(days * 86400 * 1000)
+            WEEK_MS  = 7 * 24 * 3600 * 1000   # 7-day chunks (API limit)
+
+            all_deals = []
+            chunk_start = start_ms
+            while chunk_start < end_ms:
+                chunk_end = min(chunk_start + WEEK_MS, end_ms)
+                req = ProtoOADealListReq()
+                req.ctidTraderAccountId = self.account_id
+                req.fromTimestamp = chunk_start
+                req.toTimestamp   = chunk_end
+                try:
+                    resp = await self._async_send_recv(req, timeout=20)
+                    if hasattr(resp, "deal"):
+                        all_deals.extend(resp.deal)
+                except Exception as chunk_err:
+                    logger.debug(f"[cTrader] deal chunk error: {chunk_err}")
+                chunk_start = chunk_end
+
+            result = []
+            for deal in all_deals:
+                # Only closing deals have gross profit
+                if not hasattr(deal, "closePositionDetail"):
+                    continue
+                cpd = deal.closePositionDetail
+                sym_name = self._resolve_sym_name(deal.symbolId)
+                if symbol and sym_name.upper() != symbol.upper():
+                    continue
+
+                # cTrader stores prices as integers × 100000
+                close_price = float(deal.executionPrice) / 100000.0
+                open_price  = float(cpd.entryPrice) / 100000.0 if hasattr(cpd, "entryPrice") else 0.0
+                pnl         = float(cpd.grossProfit) / 100.0   # stored in cents
+                volume      = float(deal.volume) / 100.0
+
+                side = "buy" if getattr(deal, "tradeSide", 1) == ProtoOATradeSide.BUY else "sell"
+
+                close_time = datetime.fromtimestamp(
+                    deal.executionTimestamp / 1000, tz=timezone.utc
+                ).isoformat() if hasattr(deal, "executionTimestamp") else ""
+
+                open_time = datetime.fromtimestamp(
+                    cpd.entryTimestamp / 1000, tz=timezone.utc
+                ).isoformat() if hasattr(cpd, "entryTimestamp") else ""
+
+                result.append({
+                    "ticket":      deal.dealId,
+                    "symbol":      sym_name,
+                    "type":        side,
+                    "volume":      volume,
+                    "open_price":  round(open_price, 6),
+                    "close_price": round(close_price, 6),
+                    "profit":      round(pnl, 4),
+                    "open_time":   open_time,
+                    "close_time":  close_time,
+                    "broker":      "ctrader",
+                })
+
+            logger.info(
+                f"[cTrader] get_trade_history: {len(result)} deals (last {days}d)"
+            )
+            return result
+
+        except Exception as e:
+            logger.error(f"[cTrader] _async_get_deal_history: {e}")
+            return []
 
     # ─────────────────────────────────────────────────────────────────────────
     # Compatibility helpers

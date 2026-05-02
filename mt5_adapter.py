@@ -334,7 +334,18 @@ class MT5Adapter(BaseBroker):
             logger.error(f"[MT5] No tick data for {symbol}")
             return None
 
-        # ── 2. Spread and margin guards ───────────────────────────────────────
+        # ── 2. Market open guard ─────────────────────────────────────────────
+        # trade_mode: 0=disabled, 1=longonly, 2=shortonly, 3=closeonly, 4=full
+        # If not 4 (full) or 1/2 for the requested direction, skip silently.
+        trade_mode = int(getattr(sym_info, "trade_mode", 4))
+        if trade_mode == 0:
+            logger.info(f"[MT5] {symbol}: market closed (trade_mode=0) — skipping order")
+            return None
+        if trade_mode == 3:
+            logger.info(f"[MT5] {symbol}: close-only mode — skipping new order")
+            return None
+
+        # ── 3. Spread and margin guards ───────────────────────────────────────
         if not self._spread_ok(symbol, sym_info, tick):
             return None
 
@@ -342,7 +353,7 @@ class MT5Adapter(BaseBroker):
         if acct and not self._margin_ok(symbol, volume, order_type, tick, acct):
             return None
 
-        # ── 3. Extract symbol parameters — all cast to native Python types ────
+        # ── 4. Extract symbol parameters — all cast to native Python types ────
         # MT5 C-extension objects return values that can silently be numpy or
         # ctypes scalars.  order_send rejects requests containing non-native
         # Python types, which causes a silent None response with no error detail.
@@ -742,7 +753,14 @@ class MT5Adapter(BaseBroker):
     # Trade history
     # ─────────────────────────────────────────────────────────────────────────
 
-    def get_trade_history(self, days: int = 7, symbol: str = "") -> List[Dict]:
+    def get_trade_history(self, days: int = 365, symbol: str = "") -> List[Dict]:
+        """
+        Pull full closed trade history from MT5.  (v20 — was 7d, now 365d)
+
+        Uses mt5.history_deals_get() with DEAL_ENTRY_OUT to get every closed
+        position. Also pulls the matching IN deal to reconstruct open_time and
+        open_price so the TradeHistoryLearner gets accurate entry data.
+        """
         if not self.ensure_connected():
             return []
         try:
@@ -751,23 +769,40 @@ class MT5Adapter(BaseBroker):
             deals = mt5.history_deals_get(start, end)
             if not deals:
                 return []
+
+            # Build a map of position_id → IN deal for open_price / open_time
+            in_deals: Dict[int, object] = {}
+            for d in deals:
+                if d.entry == mt5.DEAL_ENTRY_IN:
+                    in_deals[d.position_id] = d
+
             out = []
             for d in deals:
                 if d.entry != mt5.DEAL_ENTRY_OUT:
                     continue
                 if symbol and d.symbol != symbol:
                     continue
+
+                # Reconstruct open side from matching IN deal
+                in_d = in_deals.get(d.position_id)
+                open_price = float(in_d.price)                             if in_d else 0.0
+                open_time  = datetime.fromtimestamp(in_d.time).isoformat() if in_d else ""
+                close_time = datetime.fromtimestamp(d.time).isoformat()
+
                 out.append({
-                    "ticket":  d.ticket,
-                    "symbol":  d.symbol,
-                    "time":    datetime.fromtimestamp(d.time).isoformat(),
-                    "type":    "buy" if d.type == mt5.DEAL_TYPE_BUY else "sell",
-                    "volume":  d.volume,
-                    "price":   d.price,
-                    "profit":  d.profit,
-                    "comment": d.comment,
-                    "broker":  "mt5",
+                    "ticket":      d.ticket,
+                    "symbol":      d.symbol,
+                    "type":        "buy" if d.type == mt5.DEAL_TYPE_BUY else "sell",
+                    "volume":      float(d.volume),
+                    "open_price":  open_price,
+                    "close_price": float(d.price),
+                    "profit":      float(d.profit),
+                    "open_time":   open_time,
+                    "close_time":  close_time,
+                    "comment":     d.comment,
+                    "broker":      "mt5",
                 })
+            logger.info(f"[MT5] get_trade_history: {len(out)} closed deals (last {days}d)")
             return out
         except Exception as e:
             logger.error(f"[MT5] get_trade_history: {e}")

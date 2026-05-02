@@ -148,6 +148,11 @@ DEFAULT_SYMBOLS = {
     "mt5":     ["EURUSD", "XAUUSD", "US100..", "US30..", "US500..", "XAGUSD..", "BTCUSD", "GBPUSD", "USDJPY", "AUDUSD", "USDCHF", "NZDUSD", "EURGBP", "EURJPY", "GBPJPY", "AUDJPY", "CHFJPY"],
     "ibkr":    ["EUR.USD", "XAU.USD", "SPX"],
     "ctrader": ["EURUSD", "XAUUSD", "USOIL"],
+    # v20: Alpaca stocks + crypto — trainer now fully supports Alpaca
+    "alpaca":  ["SPY", "QQQ", "AAPL", "MSFT", "NVDA", "TSLA", "AMZN", "GOOGL",
+                "BTC/USD", "ETH/USD", "SOL/USD"],
+    "alpaca_markets": ["SPY", "QQQ", "AAPL", "MSFT", "NVDA", "TSLA", "AMZN",
+                       "GOOGL", "BTC/USD", "ETH/USD", "SOL/USD"],
 }
 TRAIN_SYMBOLS = (
     DEFAULT_SYMBOLS.get(BROKER_TYPE, ["EURUSD", "XAUUSD"])

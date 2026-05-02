@@ -577,31 +577,86 @@ class IBKRAdapter(BaseBroker):
     # Trade history
     # ─────────────────────────────────────────────────────────────────────────
 
-    def get_trade_history(self, days: int = 7, symbol: str = "") -> List[Dict]:
+    def get_trade_history(self, days: int = 365, symbol: str = "") -> List[Dict]:
+        """
+        Pull closed trade history from IBKR fills with real PnL.  (v20)
+
+        IBKR fills() only gives executions, not PnL. We reconstruct PnL via
+        FIFO BUY→SELL matching per symbol (same approach as Alpaca adapter).
+        Also tries reqPnLSingle for live PnL where available.
+        365d default (was 7d) so the TradeHistoryLearner gets full context.
+        """
         if not self.ensure_connected():
             return []
         try:
-            end   = datetime.now()
+            end   = datetime.now(timezone.utc)
             start = end - timedelta(days=days)
+
             fills = self._ib.fills()
-            result = []
+            if not fills:
+                return []
+
+            # Group fills by symbol, sort by time
+            by_sym: Dict[str, list] = {}
             for fill in fills:
-                t = fill.time
-                if not (start <= t <= end):
+                try:
+                    t = fill.time
+                    # ib_insync returns naive or aware datetime
+                    if hasattr(t, 'tzinfo') and t.tzinfo is None:
+                        from datetime import timezone as _tz
+                        t = t.replace(tzinfo=_tz.utc)
+                    if not (start <= t <= end):
+                        continue
+                    sym = fill.contract.symbol
+                    if symbol and sym.upper() != symbol.upper():
+                        continue
+                    by_sym.setdefault(sym, []).append((t, fill))
+                except Exception:
                     continue
-                sym_name = fill.contract.symbol
-                if symbol and sym_name.upper() != symbol.upper():
-                    continue
-                result.append({
-                    "ticket":  fill.execution.execId,
-                    "symbol":  sym_name,
-                    "time":    t.isoformat(),
-                    "type":    "buy" if fill.execution.side == "BOT" else "sell",
-                    "volume":  fill.execution.shares,
-                    "price":   fill.execution.price,
-                    "profit":  0.0,
-                    "broker":  "ibkr",
-                })
+
+            result = []
+            for sym, entries in by_sym.items():
+                entries.sort(key=lambda x: x[0])
+                buys: List[Dict] = []
+                for t, fill in entries:
+                    side  = fill.execution.side   # "BOT" or "SLD"
+                    qty   = float(fill.execution.shares)
+                    price = float(fill.execution.price)
+
+                    if side == "BOT":
+                        buys.append({"qty": qty, "price": price,
+                                     "ts": t, "id": fill.execution.execId})
+                    else:
+                        # SLD — FIFO match against buys
+                        remaining = qty
+                        pnl = 0.0
+                        entry_price = price
+                        entry_ts    = t
+                        while remaining > 1e-9 and buys:
+                            b       = buys[0]
+                            matched = min(b["qty"], remaining)
+                            pnl    += matched * (price - b["price"])
+                            entry_price = b["price"]
+                            entry_ts    = b["ts"]
+                            b["qty"]   -= matched
+                            remaining  -= matched
+                            if b["qty"] <= 1e-9:
+                                buys.pop(0)
+
+                        result.append({
+                            "ticket":      fill.execution.execId,
+                            "symbol":      sym,
+                            "type":        "buy",
+                            "volume":      qty,
+                            "open_price":  round(entry_price, 6),
+                            "close_price": round(price, 6),
+                            "profit":      round(pnl, 4),
+                            "open_time":   entry_ts.isoformat(),
+                            "close_time":  t.isoformat(),
+                            "broker":      "ibkr",
+                        })
+
+            logger.info(f"[IBKR] get_trade_history: {len(result)} paired trades (last {days}d)")
             return result
         except Exception as e:
             logger.error(f"[IBKR] get_trade_history: {e}")

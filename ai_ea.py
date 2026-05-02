@@ -56,6 +56,13 @@ from prop_guard         import PropGuard
 from evaluator          import StrategyEvaluator
 from visualizer         import TradingVisualizer
 
+# v20: Real trade history learner — trains from every win + loss ever recorded
+try:
+    from trade_history_learner import TradeHistoryLearner
+    HIST_LEARNER_AVAILABLE = True
+except ImportError:
+    HIST_LEARNER_AVAILABLE = False
+
 # ── Graceful MT5 import (still used by broker_compat / legacy helpers) ────────
 try:
     import MetaTrader5 as mt5
@@ -309,11 +316,20 @@ class AITradingEA:
         self._auto_lot_scale:       float = 1.0
         self._auto_max_concurrent:  int   = MAX_CONCURRENT
 
+        # v20: Trade history learner — load persisted stats immediately,
+        # then kick off a full learn in background at first cycle.
+        self._hist_learner: Optional[object] = None
+        if HIST_LEARNER_AVAILABLE:
+            self._hist_learner = TradeHistoryLearner()
+            self._hist_learner.load_persisted(self.symbols)
+            logger.info("[v20] TradeHistoryLearner initialised (persisted stats loaded).")
+
         logger.info(
-            "All v19 components initialised. "
+            "All v20 components initialised. "
             f"broker={self.broker.broker_name} "
             f"MTF={MTF_AVAILABLE} Regime={REGIME_AVAILABLE} "
-            f"AutoEngine={AUTO_EA_AVAILABLE}"
+            f"AutoEngine={AUTO_EA_AVAILABLE} "
+            f"HistLearner={HIST_LEARNER_AVAILABLE}"
         )
 
     # ── Symbol resolution ──────────────────────────────────────────────────────
@@ -663,6 +679,38 @@ class AITradingEA:
             self._auto_lot_scale = 1.0
             self._auto_max_concurrent = MAX_CONCURRENT
 
+        # v20: TradeHistoryLearner — run on first cycle only.
+        # IMPORTANT: broker.get_trade_history() MUST be called here (in the
+        # executor / main cycle thread) NOT in a separate background thread,
+        # because MT5's Python API is single-threaded and calling it from two
+        # threads simultaneously causes a silent disconnect.
+        # We fetch the raw history synchronously here, then hand the data to
+        # the learner which does all the CPU-heavy stat computation in a
+        # daemon thread so it doesn't block the cycle.
+        if HIST_LEARNER_AVAILABLE and self._hist_learner is not None:
+            if not getattr(self, "_hist_learn_done", False):
+                self._hist_learn_done = True   # set immediately — prevent re-entry
+                try:
+                    raw_history = self.broker.get_trade_history(days=365)
+                except Exception as _he:
+                    logger.warning(f"[v20] Could not fetch broker trade history: {_he}")
+                    raw_history = []
+
+                import threading as _threading
+                def _bg_process(hist):
+                    try:
+                        self._hist_learner.run_full_learn(
+                            broker=None,           # broker already called above
+                            symbols=self.symbols,
+                            prefetched_history=hist,
+                        )
+                    except Exception as ex:
+                        logger.warning(f"[v20] HistLearner processing error: {ex}")
+                _threading.Thread(
+                    target=_bg_process, args=(raw_history,),
+                    daemon=True, name="hist_learner"
+                ).start()
+
         # ── v19 DIR-10: refresh symbol active set once per cycle ──────────────
         if AUTO_EA_AVAILABLE and self._symbol_scorer is not None:
             self._symbol_scorer.refresh_active_set(self.symbols)
@@ -996,6 +1044,27 @@ class AITradingEA:
         if not guard_ok:
             logger.info(f"  {symbol} PROP GUARD blocked: {guard_reason}")
             return
+
+        # v20: History-learner filter — block bad hours/days based on real trade history
+        if HIST_LEARNER_AVAILABLE and self._hist_learner is not None:
+            from datetime import datetime as _dt
+            _now = _dt.now()
+            hist_ok, hist_reason = self._hist_learner.suggest_filter(
+                symbol,
+                hour=_now.hour,
+                weekday=_now.weekday(),
+            )
+            if not hist_ok:
+                logger.info(f"  {symbol} HIST LEARNER blocked: {hist_reason}")
+                return
+            # Bias score: if strongly negative history, require higher signal prob
+            _bias = self._hist_learner.bias_score(symbol)
+            if _bias < -0.3 and prob < (MIN_SIGNAL_PROB + 0.05):
+                logger.info(
+                    f"  {symbol} HIST LEARNER: bias={_bias:+.2f} → "
+                    f"requires higher confidence (prob={prob:.3f})"
+                )
+                return
 
         # FIX: risk_engine.approve_trade() is the authoritative gate —
         # it enforces daily loss, drawdown, cooldown, concurrent limits.
@@ -1507,6 +1576,24 @@ class AITradingEA:
                     except Exception:
                         pass
 
+            # v20: Feed closed trade into TradeHistoryLearner for ongoing learning
+            if HIST_LEARNER_AVAILABLE and self._hist_learner is not None:
+                try:
+                    import datetime as _datetime_mod
+                    self._hist_learner.record_close({
+                        "ticket":     ticket,
+                        "symbol":     symbol,
+                        "type":       info.get("type", "buy"),
+                        "volume":     info.get("volume", 0.01),
+                        "open_price": info.get("open_price", 0.0),
+                        "profit":     pnl,
+                        "open_time":  info.get("open_time", ""),
+                        "close_time": _datetime_mod.datetime.utcnow().isoformat(),
+                        "strategy":   "AI_EA",
+                    })
+                except Exception as _hl_e:
+                    logger.debug(f"HistLearner record_close error: {_hl_e}")
+
         # Refresh known tickets — store latest broker profit so last-known value is accurate
         self._known_tickets = {}
         try:
@@ -1514,10 +1601,12 @@ class AITradingEA:
                 for pos in (self.broker.get_open_positions(symbol) or []):
                     t = pos["ticket"]
                     self._known_tickets[t] = {
-                        "symbol": symbol,
-                        "profit": float(pos.get("profit", 0.0)),
-                        "type":   pos.get("type", "buy"),
-                        "volume": float(pos.get("volume", 0.01)),
+                        "symbol":     symbol,
+                        "profit":     float(pos.get("profit", 0.0)),
+                        "type":       pos.get("type", "buy"),
+                        "volume":     float(pos.get("volume", 0.01)),
+                        "open_price": float(pos.get("open_price", 0.0)),   # v20
+                        "open_time":  str(pos.get("open_time", "")),        # v20
                     }
         except Exception as e:
             logger.debug(f"_reconcile_closed_positions refresh error: {e}")

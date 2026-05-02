@@ -226,7 +226,7 @@ class BaseBroker(ABC):
     # Trade history
     # ─────────────────────────────────────────────────────────────────────────
 
-    def get_trade_history(self, days: int = 7, symbol: str = "") -> List[Dict]:
+    def get_trade_history(self, days: int = 365, symbol: str = "") -> List[Dict]:
         """
         Return closed trade history (last N days).
         Default implementation returns empty list — override in adapters
