@@ -1,12 +1,21 @@
-# AI EA v9 PRO — Requirements
-MetaTrader5
+# AI EA v20 — Requirements
+# Core ML + data
 numpy
 pandas
 scikit-learn
 xgboost
-lightgbm          # v9 NEW: 4th ensemble member, highest accuracy on tabular data
+lightgbm
+scipy
 matplotlib
 plotly
+
+# Brokers (install only what you use)
+MetaTrader5          # MT5: Windows only
+alpaca-py            # Alpaca: pip install alpaca-py
+ib_insync            # IBKR: pip install ib_insync
+# ctrader — see ctrader_adapter.py for its own requirements
+
+# Utilities
 cryptography
 pytz
-scipy
+requests

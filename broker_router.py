@@ -1,5 +1,5 @@
 """
-broker_router.py — Universal Broker Router (AI EA v5)
+broker_router.py — Universal Broker Router (AI EA v20)
 ======================================================
 Selects and initialises the correct broker adapter at runtime based on
 the BROKER_TYPE environment variable (or explicit argument).
@@ -8,6 +8,7 @@ Supported broker types:
     mt5       → MT5Adapter       (MetaTrader 5)
     ibkr      → IBKRAdapter      (Interactive Brokers via ib_insync)
     ctrader   → CTraderAdapter   (Spotware cTrader Open API)
+    alpaca    → AlpacaAdapter    (Alpaca Markets — stocks/crypto, paper/live/offline)
 
 Usage
 -----
@@ -17,7 +18,7 @@ router = BrokerRouter()           # reads BROKER_TYPE from env
 broker = router.get_broker()      # returns connected BaseBroker instance
 
 Or force a specific type:
-    router = BrokerRouter(broker_type="ibkr")
+    router = BrokerRouter(broker_type="alpaca")
     broker = router.get_broker()
 
 Environment variables read per broker:
@@ -40,6 +41,14 @@ Environment variables read per broker:
     CTRADER_ACCESS_TOKEN
     CTRADER_ACCOUNT_ID
     CTRADER_DEMO (default true)
+
+  Alpaca:
+    BROKER_TYPE=alpaca
+    ALPACA_API_KEY        — from alpaca.markets dashboard
+    ALPACA_SECRET_KEY     — from alpaca.markets dashboard
+    ALPACA_PAPER=true     — false for live funded account
+    ALPACA_DATA_FEED=iex  — iex (free) or sip (paid, real-time)
+    ALPACA_OFFLINE=false  — true = fully simulated, zero API calls (friend mode)
 """
 
 import logging
@@ -143,10 +152,12 @@ class BrokerRouter:
             return self._build_ibkr()
         elif t in ("ctrader", "spotware"):
             return self._build_ctrader()
+        elif t in ("alpaca", "alpaca_markets"):
+            return self._build_alpaca()
         else:
             raise ValueError(
                 f"[BrokerRouter] Unknown broker type: {t!r}. "
-                f"Valid values: mt5, ibkr, ctrader"
+                f"Valid values: mt5, ibkr, ctrader, alpaca"
             )
 
     def _build_mt5(self) -> BaseBroker:
@@ -220,6 +231,36 @@ class BrokerRouter:
             access_token=access_token,
             account_id=account_id,
             demo=demo,
+            risk_engine=self._risk_engine,
+        )
+
+    def _build_alpaca(self) -> BaseBroker:
+        from alpaca_adapter import AlpacaAdapter
+
+        api_key    = os.getenv("ALPACA_API_KEY", "")
+        secret_key = os.getenv("ALPACA_SECRET_KEY", "")
+        paper      = os.getenv("ALPACA_PAPER", "true").lower() in ("1", "true", "yes")
+        data_feed  = os.getenv("ALPACA_DATA_FEED", "iex")
+        offline    = os.getenv("ALPACA_OFFLINE", "false").lower() in ("1", "true", "yes")
+
+        if not offline and (not api_key or not secret_key):
+            logger.warning(
+                "[BrokerRouter] ALPACA_API_KEY / ALPACA_SECRET_KEY not set. "
+                "Switching to offline simulation mode automatically."
+            )
+            offline = True
+
+        mode = "OFFLINE" if offline else ("PAPER" if paper else "LIVE")
+        logger.info(
+            f"[BrokerRouter] Building AlpacaAdapter mode={mode} "
+            f"data_feed={data_feed}"
+        )
+        return AlpacaAdapter(
+            api_key=api_key,
+            secret_key=secret_key,
+            paper=paper,
+            data_feed=data_feed,
+            offline=offline,
             risk_engine=self._risk_engine,
         )
 
