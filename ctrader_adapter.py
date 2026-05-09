@@ -506,8 +506,7 @@ class CTraderAdapter(BaseBroker):
         )
         try:
             result = future.result(timeout=15)
-            if result and self.risk_engine:
-                self.risk_engine.record_trade_open()
+            # NOTE: record_trade_open() is called by ai_ea.py — do not call here.
             return result
         except Exception as e:
             logger.error(f"[cTrader] place_order({symbol}): {e}")

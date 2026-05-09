@@ -430,8 +430,7 @@ class IBKRAdapter(BaseBroker):
                 "timestamp":   datetime.now(timezone.utc).isoformat(),
                 "broker":      "ibkr",
             }
-            if self.risk_engine:
-                self.risk_engine.record_trade_open()
+            # NOTE: record_trade_open() is called by ai_ea.py — do not call here.
             logger.info(
                 f"[IBKR] ORDER ▶ {symbol} {action} {vol} | "
                 f"ticket={ticket} prob={signal_prob:.3f}"

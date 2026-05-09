@@ -124,15 +124,15 @@ class BotConfig:
     bars:                 int       = 2160
 
     # Risk settings
-    risk_per_trade:   float = 0.007   # 0.7%
-    max_daily_loss:   float = 0.03    # 3%
-    max_drawdown:     float = 0.08    # 8%
-    max_trades_day:   int   = 10
-    max_concurrent:   int   = 5
+    risk_per_trade:   float = 0.0     # 0 = auto-tier by equity
+    max_daily_loss:   float = 0.0     # 0 = auto-tier by equity
+    max_drawdown:     float = 0.0     # 0 = auto-tier by equity
+    max_trades_day:   int   = 0       # 0 = auto-tier by equity
+    max_concurrent:   int   = 0       # 0 = auto-tier by equity
     atr_multiplier:   float = 1.5
 
     # Prop-firm mode
-    prop_mode:        bool  = True
+    prop_mode:        bool  = False
 
     # Signal quality
     min_signal_prob:  float = 0.35

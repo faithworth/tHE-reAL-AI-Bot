@@ -487,8 +487,8 @@ class MT5Adapter(BaseBroker):
             "broker":      "mt5",
         }
         self._log_trade(record)
-        if self.risk_engine:
-            self.risk_engine.record_trade_open()
+        # NOTE: record_trade_open() is called by ai_ea.py after place_order() returns.
+        # Do NOT call it here — that would double-count every trade in daily_trades.
         logger.info(
             f"[MT5] ORDER ▶ {symbol} {order_type.upper()} {vol}L | "
             f"price={exec_price} sl={final_sl:.{digits}f} tp={final_tp:.{digits}f} | "

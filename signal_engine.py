@@ -35,13 +35,33 @@ import os
 import pickle
 import logging
 import warnings
-# Suppress sklearn balanced_accuracy_score UserWarning: "y_pred contains classes not in y_true"
-# This fires on short OOS folds where the test set has no SELL bars but the model predicts SELL.
-# The warning is cosmetic — balanced_accuracy_score handles it correctly via zero-division.
+
+# ── Warning filters ───────────────────────────────────────────────────────────
+# 1. Suppress sklearn balanced_accuracy_score UserWarning:
+#    "y_pred contains classes not in y_true"
+#    Fires on short OOS folds where the test set has no SELL bars but the model
+#    predicts SELL. Cosmetic only — handled correctly via zero-division.
 warnings.filterwarnings(
     "ignore",
     message="y_pred contains classes not in y_true",
     category=UserWarning,
+)
+# 2. Suppress sklearn joblib/parallel configuration propagation warning.
+#    Root cause: n_jobs=1 on all models so no joblib worker pool is spawned,
+#    but sklearn's internal machinery still emits this on newer sklearn versions
+#    when delayed() is called outside of Parallel(). Setting n_jobs=1 everywhere
+#    is the real fix; this filter silences any residual noise from third-party libs.
+warnings.filterwarnings(
+    "ignore",
+    message=r"`sklearn\.utils\.parallel\.delayed` should be used with",
+    category=UserWarning,
+    module=r"sklearn",
+)
+# 3. Suppress datetime.utcnow() DeprecationWarning from any imported library.
+warnings.filterwarnings(
+    "ignore",
+    message="datetime.datetime.utcnow\\(\\) is deprecated",
+    category=DeprecationWarning,
 )
 import numpy as np
 import pandas as pd
@@ -92,7 +112,17 @@ try:
     import lightgbm as lgb
     LGB_AVAILABLE = True
 except ImportError:
-    LGB_AVAILABLE = False
+    # v20-FIX: auto-install lightgbm if missing — it's critical for symbol-specific models
+    try:
+        import subprocess, sys
+        subprocess.check_call(
+            [sys.executable, "-m", "pip", "install", "lightgbm", "--quiet"],
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+        )
+        import lightgbm as lgb
+        LGB_AVAILABLE = True
+    except Exception:
+        LGB_AVAILABLE = False
 
 from sklearn.ensemble        import RandomForestClassifier, GradientBoostingClassifier
 from sklearn.ensemble        import HistGradientBoostingClassifier   # fast GBM (40x speedup in CV)
@@ -629,7 +659,7 @@ class SignalEngine:
             self.rf_model = RandomForestClassifier(
                 n_estimators=n_estimators, max_depth=max_depth,
                 min_samples_leaf=adaptive_leaf_b,
-                class_weight=cw_dict_b, random_state=42, n_jobs=-1)
+                class_weight=cw_dict_b, random_state=42, n_jobs=1)
             self.rf_model.fit(X_scaled_b, y_b, sample_weight=w_blend)
 
             logger.info(f"[{self.symbol}] Training HistGBM "
@@ -647,7 +677,7 @@ class SignalEngine:
                     n_estimators=n_estimators, learning_rate=learning_rate,
                     max_depth=max_depth,
                     subsample=0.8, colsample_bytree=0.8,
-                    eval_metric="mlogloss", random_state=42, n_jobs=-1)
+                    eval_metric="mlogloss", random_state=42, n_jobs=1)
                 self.xgb_model.fit(X_scaled_df, y_b, sample_weight=w_blend)
 
             if LGB_AVAILABLE:
@@ -656,7 +686,7 @@ class SignalEngine:
                     n_estimators=n_estimators, learning_rate=learning_rate,
                     max_depth=max_depth,
                     num_leaves=31, subsample=0.8, colsample_bytree=0.8,
-                    class_weight="balanced", random_state=42, n_jobs=-1,
+                    class_weight="balanced", random_state=42, n_jobs=1,
                     verbosity=-1)
                 self.lgb_model.fit(X_scaled_df, y_b, sample_weight=w_blend)
 
@@ -756,7 +786,7 @@ class SignalEngine:
                     rf_r = RandomForestClassifier(
                         n_estimators=n_estimators, max_depth=max_depth,
                         min_samples_leaf=leaf_r,
-                        class_weight=cwd_r, random_state=42, n_jobs=-1
+                        class_weight=cwd_r, random_state=42, n_jobs=1
                     )
                     rf_r.fit(X_rs, y_r)
                     gbm_r = HistGradientBoostingClassifier(
@@ -896,7 +926,7 @@ class SignalEngine:
             leaf_p = max(3, len(Xpb) // 80)
             rf_p = RandomForestClassifier(
                 n_estimators=n_estimators, max_depth=max_depth,
-                min_samples_leaf=leaf_p, class_weight=cwd_p, random_state=42, n_jobs=-1
+                min_samples_leaf=leaf_p, class_weight=cwd_p, random_state=42, n_jobs=1
             )
             rf_p.fit(Xpb, ypb, sample_weight=wpb)
             # Quick WF estimate
@@ -928,7 +958,7 @@ class SignalEngine:
                         xgb_p = xgb.XGBClassifier(
                             n_estimators=n_estimators, max_depth=max_depth,
                             learning_rate=learning_rate,
-                            eval_metric="mlogloss", random_state=42, n_jobs=-1
+                            eval_metric="mlogloss", random_state=42, n_jobs=1
                         )
                         xgb_p.fit(Xpb, ypb, sample_weight=wpb)
                     except Exception:
@@ -940,7 +970,7 @@ class SignalEngine:
                         import lightgbm as lgb
                         lgb_p = lgb.LGBMClassifier(
                             n_estimators=n_estimators, max_depth=max_depth,
-                            learning_rate=learning_rate, random_state=42, n_jobs=-1,
+                            learning_rate=learning_rate, random_state=42, n_jobs=1,
                             verbose=-1
                         )
                         lgb_p.fit(Xpb, ypb, sample_weight=wpb)

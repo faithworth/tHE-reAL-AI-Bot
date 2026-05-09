@@ -38,6 +38,10 @@ warnings.filterwarnings(
     message="X does not have valid feature names",
     category=UserWarning,
 )
+# Suppress pandas/numpy FutureWarnings that pollute logs without affecting behaviour
+warnings.filterwarnings("ignore", category=FutureWarning)
+# Suppress DeprecationWarnings from third-party libraries
+warnings.filterwarnings("ignore", category=DeprecationWarning)
 
 import numpy as np
 import pandas as pd
@@ -50,7 +54,7 @@ from broker_compat      import detect_broker, BrokerProfile
 from broker_router      import BrokerRouter
 from signal_engine      import SignalEngine
 from market_structure   import MarketStructureAnalyzer
-from trade_filters      import TradeFilters
+from trade_filters      import TradeFilters, is_premium_session
 from risk_engine        import RiskEngine
 from prop_guard         import PropGuard
 from evaluator          import StrategyEvaluator
@@ -85,6 +89,14 @@ except ImportError:
     REGIME_AVAILABLE = False
     Regime = None          # type: ignore
     REGIME_CONFIGS = {}    # type: ignore
+
+try:
+    from trend_change_detector import TrendChangeDetector, DirectionBias
+    TREND_CHANGE_AVAILABLE = True
+except ImportError:
+    TREND_CHANGE_AVAILABLE = False
+    DirectionBias = None   # type: ignore
+    logger.warning("trend_change_detector.py not found -- trend-reversal filter disabled!")
 
 try:
     from feature_engineering import FeatureEngineer
@@ -156,8 +168,8 @@ MAX_CONCURRENT       = cfg.max_concurrent
 MIN_SIGNAL_PROB      = cfg.min_signal_prob
 SL_ATR_MULT          = 1.5
 TP_ATR_MULT          = 2.5
-TRAILING_ATR_MULT    = 2.0
-BREAKEVEN_ATR_MULT   = 1.0
+TRAILING_ATR_MULT    = 1.5   # PROFIT-FIX: trail distance at 1×profit — was 2.0 but never used
+BREAKEVEN_ATR_MULT   = 1.2   # PROFIT-FIX: raised from 1.0 → give trades more room before locking BE
 RETRAIN_EVERY_CYCLES = 20
 MANAGE_LOOP_SECS     = int(os.getenv("MANAGE_LOOP_SECS", 15))  # dedicated BE/trail loop interval (seconds)
 
@@ -250,8 +262,9 @@ class AITradingEA:
         self.signal_engine    = SignalEngine()
         self.structure_engine = MarketStructureAnalyzer()
         self.filters          = TradeFilters(
-            max_spread_pips=30.0,
+            max_spread_pips=25.0,
             min_atr_pips=5.0,
+            allowed_sessions=("london", "new_york", "pre_london"),  # Asian BLOCKED for forex/metals
             require_session=True,
         )
         self.visualizer = TradingVisualizer(refresh_secs=60)
@@ -268,6 +281,10 @@ class AITradingEA:
         self.current_regime = None
         self._mtf_cache: dict = {}
         self._mtf_cache_ttl  = 300
+        # v21: Trend-change / reversal detector — prevents buying in bear trends
+        self.trend_change_det = TrendChangeDetector() if TREND_CHANGE_AVAILABLE else None
+        self._trend_change_cache: dict = {}
+        self._trend_change_cache_ttl   = 120   # 2-minute cache per symbol
 
         # v7: Ranging scalper — activated when RANGING_SCALP regime is detected
         self.range_scalper: Optional[object] = (
@@ -445,6 +462,38 @@ class AITradingEA:
         if equity > 0:
             self.risk_engine.set_equity_baseline(equity)
             logger.info(f"Starting equity: ${equity:.2f}")
+
+        # FIX: Sync open-position state from live broker on startup so that a
+        # restart after a crash/manual stop doesn't carry a stale daily_trades
+        # counter or wrong _open_positions count.
+        try:
+            _live_count = 0
+            for _sym in self.symbols:
+                for _pos in (self.broker.get_open_positions(_sym) or []):
+                    _t = _pos["ticket"]
+                    self._known_tickets[_t] = {
+                        "symbol":     _sym,
+                        "profit":     float(_pos.get("profit", 0.0)),
+                        "type":       _pos.get("type", "buy"),
+                        "volume":     float(_pos.get("volume", 0.01)),
+                        "open_price": float(_pos.get("open_price", 0.0)),
+                        "open_time":  str(_pos.get("open_time", "")),
+                    }
+                    _live_count += 1
+            # Reconcile: clamp the saved open_positions counter to reality
+            saved_open = self.risk_engine.get_status(equity).get("open_positions", 0)
+            if saved_open != _live_count:
+                logger.info(
+                    f"[STARTUP FIX] open_positions mismatch — "
+                    f"saved={saved_open}, live={_live_count}. Correcting."
+                )
+                self.risk_engine._open_positions = _live_count
+                self.risk_engine._save_state()
+            logger.info(
+                f"[STARTUP] Synced {_live_count} live open position(s) into _known_tickets."
+            )
+        except Exception as _se:
+            logger.warning(f"[STARTUP] Could not sync live positions: {_se}")
 
         self.visualizer.start()
         self._is_running = True
@@ -649,6 +698,24 @@ class AITradingEA:
             return
 
         self._reconcile_closed_positions(equity)
+
+        # FIX: Sync risk engine's _open_positions to the actual live count each
+        # cycle. This prevents drift where the counter gets out of sync due to
+        # externally closed positions, restarts, or broker disconnects.
+        try:
+            _actual_open = sum(
+                len(self.broker.get_open_positions(s) or [])
+                for s in self.symbols
+            )
+            if self.risk_engine._open_positions != _actual_open:
+                logger.debug(
+                    f"[RISK SYNC] open_positions: "
+                    f"counter={self.risk_engine._open_positions} → live={_actual_open}"
+                )
+                self.risk_engine._open_positions = _actual_open
+        except Exception:
+            pass
+
         self.risk_engine.set_equity_baseline(equity)
         risk_status = self.risk_engine.get_status(equity)
 
@@ -751,6 +818,19 @@ class AITradingEA:
             self._mtf_cache[symbol] = (result, now)
             return result
         return None
+
+    def _get_trend_change(self, symbol: str, df_h1, df_h4=None, df_m15=None):
+        """Cache-aware TrendChangeDetector fetch (TTL 2 min). v21."""
+        if not TREND_CHANGE_AVAILABLE or self.trend_change_det is None:
+            return None
+        now = time.time()
+        if symbol in self._trend_change_cache:
+            result, ts = self._trend_change_cache[symbol]
+            if now - ts < self._trend_change_cache_ttl:
+                return result
+        result = self.trend_change_det.analyse(df_h1, df_h4=df_h4, df_m15=df_m15)
+        self._trend_change_cache[symbol] = (result, now)
+        return result
 
     def _update_regime(self, df, df_h4=None) -> None:
         """Detect regime and update scorer/risk weights. v7: passes H4 for range quality scoring."""
@@ -913,12 +993,12 @@ class AITradingEA:
                 f"htf={mtf_result.htf_aligned} ltf={mtf_result.ltf_confirmed} "
                 f"reasons={mtf_result.reasons[:3]}"
             )
-            # FIX: Raise the MTF neutral hard-skip threshold.
-            # score=0.07 means ONLY killzone_active is true — no HTF/MTF tier agreement.
-            # A neutral-bias MTF score <= 0.10 with no htf_aligned is insufficient
-            # confluence; the old score floor was masking this deficiency.
+            # v20-FIX: Only hard-skip if bias is neutral AND score is truly zero
+            # (score=0.07 means ONLY killzone_active — no tier agreement at all).
+            # score=0.000 means not even in a killzone — genuinely nothing there.
+            # Do NOT skip on score=0.07 (killzone-only); that was killing XAUUSD entirely.
             no_htf = not getattr(mtf_result, "htf_aligned", False)
-            if mtf_result.bias == "neutral" and mtf_result.score <= 0.10 and no_htf:
+            if mtf_result.bias == "neutral" and mtf_result.score == 0.0 and no_htf:
                 logger.info(
                     f"  {symbol} -> MTF confluence too weak "
                     f"(neutral bias, no HTF alignment, score={mtf_result.score:.3f}), skipping"
@@ -961,6 +1041,41 @@ class AITradingEA:
             logger.info(f"  {symbol} -> NO_TRADE (prob too low)")
             return
 
+        # ── v21: Trend-change / reversal direction filter ─────────────────────
+        # Prevents "buying twice in a downtrend" (see US30 chart: two failed BUYs
+        # during a clear bear leg). Run BEFORE structure / score to short-circuit early.
+        tc_snap = self._get_trend_change(symbol, df, df_h4=df_h4)
+        if tc_snap is not None and TREND_CHANGE_AVAILABLE and DirectionBias is not None:
+            if tc_snap.block_buy and signal == "BUY":
+                if tc_snap.direction.value == "bear":
+                    logger.info(
+                        f"  {symbol} -> TrendChange BEAR confirmed — BUY blocked "
+                        f"(conf={tc_snap.confidence:.2f} choch={tc_snap.choch} "
+                        f"bos={tc_snap.bos} reasons={tc_snap.reasons[:3]})"
+                    )
+                    return
+                elif tc_snap.direction.value == "transition_to_bear":
+                    logger.info(
+                        f"  {symbol} -> TrendChange TRANSITION_TO_BEAR — BUY requires "
+                        f"very high score (conf={tc_snap.confidence:.2f})"
+                    )
+                    # Don't block outright — but apply heavy score penalty below
+                    # (handled via _tc_penalty flag read in score section)
+            if tc_snap.block_sell and signal == "SELL":
+                if tc_snap.direction.value == "bull":
+                    logger.info(
+                        f"  {symbol} -> TrendChange BULL confirmed — SELL blocked "
+                        f"(conf={tc_snap.confidence:.2f} choch={tc_snap.choch} "
+                        f"bos={tc_snap.bos} reasons={tc_snap.reasons[:3]})"
+                    )
+                    return
+                elif tc_snap.direction.value == "transition_to_bull":
+                    logger.info(
+                        f"  {symbol} -> TrendChange TRANSITION_TO_BULL — SELL requires "
+                        f"very high score (conf={tc_snap.confidence:.2f})"
+                    )
+        # ─────────────────────────────────────────────────────────────────────
+
         # Market structure
         structure = self.structure_engine.analyse_with_mtf(df, mtf_result=mtf_result)
         logger.info(
@@ -985,6 +1100,21 @@ class AITradingEA:
                 f"  {symbol} -> signal {signal} vs structure ({structure['trend']}) "
                 f"— counter-trend, score penalised by 0.15 → {score:.3f}"
             )
+
+        # v21: Additional score penalty for TRANSITION regime (against-trend trades)
+        if (tc_snap is not None and TREND_CHANGE_AVAILABLE and DirectionBias is not None):
+            _is_transition_against = (
+                (tc_snap.direction.value == "transition_to_bear" and signal == "BUY") or
+                (tc_snap.direction.value == "transition_to_bull" and signal == "SELL")
+            )
+            if _is_transition_against:
+                _tc_penalty = round(tc_snap.confidence * 0.20, 4)  # up to -0.20
+                score = round(max(0.0, score - _tc_penalty), 4)
+                logger.info(
+                    f"  {symbol} -> TrendChange TRANSITION penalty -{_tc_penalty:.3f} "
+                    f"(conf={tc_snap.confidence:.2f}) → score={score:.3f}"
+                )
+
         logger.info(f"  {symbol} composite score={score:.3f}")
 
         # v16 FIX (Bug 1): Decouple REGIME_CONFIGS.min_signal_prob from the composite
@@ -1013,20 +1143,25 @@ class AITradingEA:
             return
 
         # Step 2: Composite score gate (independent of ML prob scale)
-        # FIX: Now that the score floor of 0.40 is removed, this gate is the real
-        # filter. Base raised to 0.42 so a plain ML-only signal (prob=0.43, neutral
-        # MTF, ranging, no structure) can no longer sneak through.
-        # Regime nudge: +0.04 for volatile/bear, -0.03 for calm.
-        min_score_threshold = 0.42
+        # v20-FIX: Base lowered from 0.43 to 0.38. The previous 0.43 base + off-hours
+        # penalty of 0.04 = 0.47 minimum, which blocked the vast majority of valid signals.
+        # The composite score uses a 0.0–1.0 scale where 0.38 represents real confluence.
+        min_score_threshold = 0.38
         if self.current_regime is not None and REGIME_AVAILABLE:
             rcfg = REGIME_CONFIGS.get(self.current_regime) if REGIME_CONFIGS else None
             if rcfg:
                 regime_name = getattr(self.current_regime, "value",
                                       str(self.current_regime)).lower()
-                if any(k in regime_name for k in ("volatile", "trending_volatile", "bear")):
-                    min_score_threshold = 0.46
+                if any(k in regime_name for k in ("volatile", "trending_volatile")):
+                    min_score_threshold = 0.42
                 elif any(k in regime_name for k in ("calm", "low_vol", "ranging")):
-                    min_score_threshold = 0.39
+                    min_score_threshold = 0.36
+
+        # Off-hours penalty: only +0.02 (was +0.04 which was too aggressive)
+        if not is_premium_session():
+            min_score_threshold += 0.02
+            logger.debug(f"  {symbol} off-hours score penalty applied → threshold={min_score_threshold:.2f}")
+
         if score < min_score_threshold:
             logger.info(
                 f"  {symbol} -> composite score too low ({score:.3f} < {min_score_threshold:.3f}), skipping"
@@ -1528,11 +1663,37 @@ class AITradingEA:
             logger.debug(f"_reconcile_closed_positions fetch error: {e}")
             return
 
+        # FIX: Update _known_tickets profit with the LATEST unrealised P&L from the
+        # broker every cycle. This ensures that if the history lookup fails, the
+        # last-seen value is at least the most recent floating P&L, not the open-time 0.0.
+        for t, data in current_tickets.items():
+            if t in self._known_tickets:
+                self._known_tickets[t]["profit"] = data["profit"]
+
         # Any ticket we were tracking that is now gone has closed externally
         closed_tickets = set(self._known_tickets) - set(current_tickets)
+
+        # FIX: Build a lookup of recently closed deals from MT5 history so we get
+        # the REAL realised PnL instead of the last-seen unrealised float (which is
+        # often 0.00 or stale). We look back 2 days to catch any position closed
+        # since the last cycle. This call is lightweight (2-day window).
+        _recent_history: dict = {}   # ticket → profit
+        try:
+            _hist = self.broker.get_trade_history(days=2)
+            for _h in (_hist or []):
+                _t = int(_h.get("ticket", 0))
+                if _t:
+                    _recent_history[_t] = float(_h.get("profit", 0.0))
+        except Exception as _he:
+            logger.debug(f"_reconcile: history fetch error: {_he}")
+
         for ticket in closed_tickets:
             info = self._known_tickets[ticket]
-            pnl = info.get("profit", 0.0)
+            # Prefer real closed PnL from broker history; fall back to last-seen value
+            if ticket in _recent_history:
+                pnl = _recent_history[ticket]
+            else:
+                pnl = info.get("profit", 0.0)
             symbol = info.get("symbol", "UNKNOWN")
             logger.info(
                 f"  [{symbol}] Externally-closed position ticket={ticket} "
@@ -1652,10 +1813,9 @@ class AITradingEA:
                     current_sl = be_sl
 
             # ── Trailing stop ────────────────────────────────────────────────
-            # Kicks in once price has moved >= 1×ATR in our favour (same
-            # threshold as breakeven so trail starts immediately after BE).
+            # Kicks in once price has moved >= BREAKEVEN_ATR_MULT×ATR in our favour.
             # Trail distance tightens in three stages as profit grows:
-            #   1×ATR profit  → trail at 1.0×ATR  (wide, gives room)
+            #   1×ATR profit  → trail at TRAILING_ATR_MULT×ATR (configurable, default 1.5)
             #   2×ATR profit  → trail at 0.75×ATR
             #   3×ATR profit  → trail at 0.5×ATR   (tight — protect big wins)
             if profit_pts >= BREAKEVEN_ATR_MULT * atr:
@@ -1664,7 +1824,7 @@ class AITradingEA:
                 elif profit_pts >= 2.0 * atr:
                     trail_dist = 0.75 * atr
                 else:
-                    trail_dist = 1.0 * atr      # start trail at 1×ATR distance
+                    trail_dist = TRAILING_ATR_MULT * atr   # use configurable constant
 
                 # New SL trails current price
                 new_sl = current_p - (trail_dist * direction)

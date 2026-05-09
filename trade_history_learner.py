@@ -45,7 +45,7 @@ logger = logging.getLogger(__name__)
 DATA_DIR          = "data"
 STATS_FILE_TPL    = os.path.join(DATA_DIR, "history_stats_{sym}.json")
 TRADE_LOG_GLOBAL  = os.path.join(DATA_DIR, "all_trades_global.jsonl")
-MIN_TRADES_FILTER = 10    # min trades before we start filtering by hour
+MIN_TRADES_FILTER = 15    # min trades before we start filtering by hour/day
 MIN_TRADES_BIAS   = 5     # min trades before bias_score is returned
 HISTORY_DAYS      = 365   # how far back to pull from broker on startup
 
@@ -176,9 +176,9 @@ def _compute_stats(trades: List[Dict]) -> Dict:
         for d, v in dow_pnl.items()
     }
 
-    good_hours   = [h for h, s in hour_stats.items() if s["n"] >= 3 and s["win_rate"] > 0.55]
-    bad_hours    = [h for h, s in hour_stats.items() if s["n"] >= 3 and s["win_rate"] < 0.35]
-    bad_weekdays = [d for d, s in dow_stats.items()  if s["n"] >= 3 and s["win_rate"] < 0.35]
+    good_hours   = [h for h, s in hour_stats.items() if s["n"] >= 8 and s["win_rate"] > 0.55]
+    bad_hours    = [h for h, s in hour_stats.items() if s["n"] >= 8 and s["win_rate"] < 0.30]
+    bad_weekdays = [d for d, s in dow_stats.items()  if s["n"] >= 8 and s["win_rate"] < 0.30]
 
     # Bias score [-1, +1]
     if n >= MIN_TRADES_BIAS:

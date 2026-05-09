@@ -858,7 +858,7 @@ class AutoRetrainScheduler:
         Returns (allowed, reason).
         reason is a human-readable explanation used in [AUTO] log lines.
         """
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc).replace(tzinfo=None)
 
         # Check: pending delay from previous worse-model retrain
         if self._pending_delay_until and now < self._pending_delay_until:
@@ -908,7 +908,7 @@ class AutoRetrainScheduler:
         Call when a retrain produced a model that did NOT beat the saved one.
         Schedules a re-attempt in RETRY_AFTER_WORSE_H hours.
         """
-        retry_at = datetime.utcnow() + timedelta(hours=self.RETRY_AFTER_WORSE_H)
+        retry_at = datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(hours=self.RETRY_AFTER_WORSE_H)
         self._pending_delay_until = retry_at
         logger.info(
             f"[AUTO] Retrain produced no improvement — "

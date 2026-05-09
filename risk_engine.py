@@ -79,7 +79,7 @@ def _auto_tier(equity: float) -> Tuple[float, float, float, int, int]:
 DEFAULT_RISK_PER_TRADE   = float(os.getenv("RISK_PER_TRADE",   "0"))   # 0 = auto-tier
 DEFAULT_MAX_DAILY_LOSS   = float(os.getenv("MAX_DAILY_LOSS",   "0"))   # 0 = auto-tier
 DEFAULT_MAX_DRAWDOWN     = float(os.getenv("MAX_DRAWDOWN",     "0"))   # 0 = auto-tier
-DEFAULT_MAX_TRADES_DAY   = 10
+DEFAULT_MAX_TRADES_DAY   = 20
 DEFAULT_MAX_CONCURRENT   = 5
 DEFAULT_ATR_MULTIPLIER   = 1.5
 DEFAULT_COOLDOWN_SECONDS = 900     # 15-min cooldown after 2+ consecutive losses
@@ -111,20 +111,22 @@ class RiskEngine:
         max_concurrent: int = DEFAULT_MAX_CONCURRENT,
         atr_multiplier: float = DEFAULT_ATR_MULTIPLIER,
         cooldown_seconds: int = DEFAULT_COOLDOWN_SECONDS,
-        prop_mode: bool = True,
+        prop_mode: bool = False,
     ):
         # Store configured values (0 = use auto-tier)
         self._cfg_risk_per_trade = risk_per_trade
         self._cfg_max_daily_loss = max_daily_loss
         self._cfg_max_drawdown   = max_drawdown
 
-        # These are active values (updated by _apply_tier)
-        self.risk_per_trade = risk_per_trade if risk_per_trade > 0 else 0.007
-        self.max_daily_loss = max_daily_loss if max_daily_loss > 0 else 0.03
-        self.max_drawdown   = max_drawdown   if max_drawdown   > 0 else 0.08
-
-        self.max_trades_day    = max_trades_day
-        self.max_concurrent    = max_concurrent
+        # These are active values (updated by _apply_tier on first approve_trade).
+        # Use conservative nano-tier defaults until equity is known — avoids
+        # the old bug where hardcoded 0.007/0.03/0.08 ignored the tier table.
+        self.risk_per_trade = risk_per_trade if risk_per_trade > 0 else _RISK_TIERS[0][1]
+        self.max_daily_loss = max_daily_loss if max_daily_loss > 0 else _RISK_TIERS[0][2]
+        self.max_drawdown   = max_drawdown   if max_drawdown   > 0 else _RISK_TIERS[0][3]
+        # 0 means auto-tier — resolved on first equity read via _apply_tier
+        self.max_concurrent  = max_concurrent  if max_concurrent  > 0 else _RISK_TIERS[0][4]
+        self.max_trades_day  = max_trades_day  if max_trades_day  > 0 else _RISK_TIERS[0][5]
         self.atr_multiplier    = atr_multiplier
         self.cooldown_seconds  = cooldown_seconds
         self.prop_mode         = prop_mode
@@ -140,7 +142,7 @@ class RiskEngine:
         self._last_loss_time: Optional[datetime] = None
         self._emergency_stop: bool = False
         self._open_positions: int = 0
-        self._protect_profits_mode: bool = False   # v20: lock-in gains
+        self._protect_profits_mode: bool = False  # v20 FIX: must start False — only activates after 2× daily target reached
 
         # v8: Portfolio correlation tracking
         self._open_lots: Dict[str, float] = {}
@@ -180,10 +182,13 @@ class RiskEngine:
             self.max_daily_loss = auto_mdl
         if self._cfg_max_drawdown <= 0:
             self.max_drawdown = auto_mdd
-        # Auto-tier max_concurrent and max_trades_day (unless user set env vars)
-        if not os.getenv("MAX_CONCURRENT"):
+        # Auto-tier max_concurrent and max_trades_day.
+        # Only skip auto-tier if env var is set AND non-zero (explicit override).
+        _env_max_conc = os.getenv("MAX_CONCURRENT")
+        if not _env_max_conc or int(_env_max_conc) == 0:
             self.max_concurrent = auto_conc
-        if not os.getenv("MAX_TRADES_DAY"):
+        _env_max_trades = os.getenv("MAX_TRADES_DAY")
+        if not _env_max_trades or int(_env_max_trades) == 0:
             self.max_trades_day = auto_trades
 
         logger.debug(
@@ -522,6 +527,7 @@ class RiskEngine:
             self._start_equity = equity
             self._consecutive_losses = 0
             self._last_loss_time = None
+            self._protect_profits_mode = False  # v20 FIX: reset protect-profits each day
             # Do NOT reset _emergency_stop on day roll — require manual override
             self._save_state()
 

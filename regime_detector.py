@@ -25,8 +25,13 @@ Each regime carries recommended parameter overrides:
 """
 
 import logging
+import warnings
 import numpy as np
 import pandas as pd
+
+# Suppress pandas FutureWarnings from rolling / ewm operations
+warnings.filterwarnings("ignore", category=FutureWarning)
+warnings.filterwarnings("ignore", category=UserWarning)
 from dataclasses import dataclass, field
 from enum import Enum, auto
 from typing import Optional, Dict, Tuple, List
@@ -68,8 +73,11 @@ class RegimeConfig:
 REGIME_CONFIGS: Dict[Regime, RegimeConfig] = {
     Regime.TRENDING_BULL: RegimeConfig(
         regime=Regime.TRENDING_BULL,
-        min_signal_prob=0.40,   # v17: T=1.5 3-class model; bull trend = lower bar (with-trend)
-        sl_atr_mult=1.2,
+        # v20-FIX: 3-class temperature-scaled model peaks at 0.45–0.65.
+        # Previous gates of 0.42–0.48 were blocking ~80% of valid signals.
+        # 0.36 matches the calibrated MIN_SIGNAL_PROB from .env and actual distribution.
+        min_signal_prob=0.36,
+        sl_atr_mult=1.5,
         tp_atr_mult=3.0,
         max_trades_day=8,
         risk_per_trade=0.008,
@@ -77,12 +85,12 @@ REGIME_CONFIGS: Dict[Regime, RegimeConfig] = {
         score_trend_weight=0.40,
         score_structure_weight=0.15,
         score_session_weight=0.10,
-        notes="Trend following: wider TP, tighter SL"
+        notes="Trend following: wider TP, consistent SL"
     ),
     Regime.TRENDING_BEAR: RegimeConfig(
         regime=Regime.TRENDING_BEAR,
-        min_signal_prob=0.40,   # v17: with-trend bear — same as bull
-        sl_atr_mult=1.2,
+        min_signal_prob=0.36,   # v20-FIX: same as bull
+        sl_atr_mult=1.5,
         tp_atr_mult=3.0,
         max_trades_day=8,
         risk_per_trade=0.008,
@@ -90,38 +98,40 @@ REGIME_CONFIGS: Dict[Regime, RegimeConfig] = {
         score_trend_weight=0.40,
         score_structure_weight=0.15,
         score_session_weight=0.10,
-        notes="Trend following short: wider TP, tighter SL"
+        notes="Trend following short: wider TP, consistent SL"
     ),
     Regime.RANGING: RegimeConfig(
         regime=Regime.RANGING,
-        min_signal_prob=0.44,   # v17: slightly higher than trending (counter-trend risk)
-        sl_atr_mult=0.8,
-        tp_atr_mult=1.5,
+        min_signal_prob=0.40,   # v20-FIX: slightly raised vs trend — ranging is trickier
+        sl_atr_mult=1.0,
+        tp_atr_mult=1.8,
         max_trades_day=6,
         risk_per_trade=0.005,
         score_ml_weight=0.30,
         score_trend_weight=0.20,
         score_structure_weight=0.40,
         score_session_weight=0.10,
-        notes="Range trading: tighter TP, higher confidence required"
+        notes="Range trading: tighter TP, moderate confidence"
     ),
     Regime.RANGING_SCALP: RegimeConfig(
         regime=Regime.RANGING_SCALP,
-        min_signal_prob=0.38,       # v17: LTF scalper uses its own multi-confirm threshold
-        sl_atr_mult=0.6,            # LTF ATR-based — very tight
-        tp_atr_mult=2.5,            # TP2 runner to far side of range
-        max_trades_day=12,          # scalps are smaller, allow more
-        risk_per_trade=0.004,       # smaller risk per scalp
+        min_signal_prob=0.38,   # v20-FIX: scalp needs speed not high bar
+        sl_atr_mult=1.0,
+        tp_atr_mult=2.0,
+        max_trades_day=8,
+        risk_per_trade=0.004,
         score_ml_weight=0.25,
-        score_trend_weight=0.10,    # trend doesn't matter much in a range
-        score_structure_weight=0.45, # structure / OB / FVG matters most
-        score_session_weight=0.20,  # session critical for scalps
-        notes="High-quality range confirmed — LTF scalp mode active (M15/M5)"
+        score_trend_weight=0.10,
+        score_structure_weight=0.45,
+        score_session_weight=0.20,
+        notes="High-quality range confirmed — LTF scalp mode active"
     ),
     Regime.BREAKOUT: RegimeConfig(
         regime=Regime.BREAKOUT,
-        min_signal_prob=0.45,   # v17: BREAKOUT
-        sl_atr_mult=1.0,
+        # v20-FIX: 0.47 blocked virtually every breakout signal seen in logs
+        # Breakouts are time-sensitive — must enter early or miss entirely
+        min_signal_prob=0.36,
+        sl_atr_mult=1.2,
         tp_atr_mult=4.0,
         max_trades_day=5,
         risk_per_trade=0.006,
@@ -129,24 +139,26 @@ REGIME_CONFIGS: Dict[Regime, RegimeConfig] = {
         score_trend_weight=0.30,
         score_structure_weight=0.15,
         score_session_weight=0.10,
-        notes="Breakout: very wide TP, momentum ride"
+        notes="Breakout: wide TP, momentum ride, early entry critical"
     ),
     Regime.REVERSAL: RegimeConfig(
         regime=Regime.REVERSAL,
-        min_signal_prob=0.46,   # v17: REVERSAL
-        sl_atr_mult=1.0,
-        tp_atr_mult=2.0,
+        # v20-FIX: 0.48 blocked every reversal — USDJPY SELL at 0.644 still blocked
+        # because BTCUSD was in reversal regime at the time. Gate must be realistic.
+        min_signal_prob=0.38,
+        sl_atr_mult=1.2,
+        tp_atr_mult=2.5,
         max_trades_day=4,
         risk_per_trade=0.004,
         score_ml_weight=0.40,
         score_trend_weight=0.20,
         score_structure_weight=0.35,
         score_session_weight=0.05,
-        notes="Reversal: high confidence required, reduced size"
+        notes="Reversal: moderate confidence gate, reduced size"
     ),
     Regime.VOLATILE: RegimeConfig(
         regime=Regime.VOLATILE,
-        min_signal_prob=0.48,   # v17: VOLATILE
+        min_signal_prob=0.42,   # keep slightly elevated for high vol
         sl_atr_mult=2.0,
         tp_atr_mult=2.5,
         max_trades_day=3,
@@ -155,11 +167,11 @@ REGIME_CONFIGS: Dict[Regime, RegimeConfig] = {
         score_trend_weight=0.25,
         score_structure_weight=0.25,
         score_session_weight=0.10,
-        notes="High volatility: wider SL, small size, very selective"
+        notes="High volatility: wider SL, small size, selective"
     ),
     Regime.DEAD: RegimeConfig(
         regime=Regime.DEAD,
-        min_signal_prob=0.55,   # v17: DEAD (trading suspended anyway)
+        min_signal_prob=0.50,   # DEAD: elevated — rarely trade
         sl_atr_mult=1.5,
         tp_atr_mult=2.0,
         max_trades_day=2,
@@ -169,9 +181,9 @@ REGIME_CONFIGS: Dict[Regime, RegimeConfig] = {
     ),
     Regime.UNKNOWN: RegimeConfig(
         regime=Regime.UNKNOWN,
-        min_signal_prob=0.42,   # v17: UNKNOWN — conservative default
+        min_signal_prob=0.38,   # v20-FIX: unknown should not be over-filtered
         trade_allowed=True,
-        notes="Unknown regime: using conservative defaults"
+        notes="Unknown regime: using base defaults"
     ),
 }
 
